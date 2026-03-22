@@ -38,35 +38,21 @@ jobs:
       - name: Download Qt archives
         shell: pwsh
         run: |
+          $QtBaseRepo = 'https://download.qt.io/online/qtsdkrepository/windows_arm64/desktop/qt6_6103/qt6_6103/qt.qt6.6103.win64_msvc2022_arm64'
+          $QtImageFormatsRepo = 'https://download.qt.io/online/qtsdkrepository/windows_arm64/desktop/qt6_6103/qt6_6103/qt.qt6.6103.addons.qtimageformats.win64_msvc2022_arm64'
+          $Qt5CompatRepo = 'https://download.qt.io/online/qtsdkrepository/windows_arm64/desktop/qt6_6103/qt6_6103/qt.qt6.6103.addons.qt5compat.win64_msvc2022_arm64'
+      
           $files = @(
-            @{
-              Url  = "$env:QtRepo/qt.qt6.6103.win64_msvc2022_arm64/6.10.3-0-202603181018qtbase-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"
-              Name = "qtbase.7z"
-            }
-            @{
-              Url  = "$env:QtRepo/qt.qt6.6103.addons.qt5compat.win64_msvc2022_arm64/6.10.3-0-202603181018qt5compat-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"
-              Name = "qt5compat.7z"
-            }
-            @{
-              Url  = "$env:QtRepo/qt.qt6.6103.addons.qtimageformats.win64_msvc2022_arm64/6.10.3-0-202603181018qtimageformats-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"
-              Name = "qtimageformats.7z"
-            }
-            @{
-              Url  = "$env:QtRepo/qt.qt6.6103.addons.qtsvg.win64_msvc2022_arm64/6.10.3-0-202603181018qtsvg-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"
-              Name = "qtsvg.7z"
-            }
-            @{
-              Url  = "$env:QtRepo/qt.qt6.6103.addons.qttools.win64_msvc2022_arm64/6.10.3-0-202603181018qttools-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"
-              Name = "qttools.7z"
-            }
-            @{
-              Url  = "$env:QtRepo/qt.qt6.6103.addons.qtranslations.win64_msvc2022_arm64/6.10.3-0-202603181018qtranslations-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"
-              Name = "qtranslations.7z"
-            }
+            @{ Url = "$QtBaseRepo/6.10.3-0-202603181018qtbase-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qtbase.7z" }
+            @{ Url = "$QtBaseRepo/6.10.3-0-202603181018qtsvg-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qtsvg.7z" }
+            @{ Url = "$QtBaseRepo/6.10.3-0-202603181018qttools-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qttools.7z" }
+            @{ Url = "$QtBaseRepo/6.10.3-0-202603181018qttranslations-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qttranslations.7z" }
+            @{ Url = "$QtImageFormatsRepo/6.10.3-0-202603181018qtimageformats-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qtimageformats.7z" }
+            @{ Url = "$Qt5CompatRepo/6.10.3-0-202603181018qt5compat-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qt5compat.7z" }
           )
-
+      
           New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\downloads" | Out-Null
-
+      
           foreach ($f in $files) {
             $dst = Join-Path "$env:GITHUB_WORKSPACE\downloads" $f.Name
             Invoke-WebRequest -Uri $f.Url -OutFile $dst
