@@ -1,0 +1,152 @@
+name: build-windows-arm64
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-11-arm
+
+    env:
+      QtRoot: ${{ github.workspace }}\qt\6.10.3\msvc2022_arm64
+      BuildDir: ${{ github.workspace }}\build-arm64
+      InstallDir: ${{ github.workspace }}\out-arm64
+      QtRepo: https://download.qt.io/online/qtsdkrepository/windows_arm64/desktop/qt6_6103/qt6_6103
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show variables
+        shell: pwsh
+        run: |
+          $QtRoot     = "$env:QtRoot"
+          $BuildDir   = "$env:BuildDir"
+          $InstallDir = "$env:InstallDir"
+
+          "QtRoot     = $QtRoot"
+          "BuildDir   = $BuildDir"
+          "InstallDir = $InstallDir"
+
+      - name: Ensure Qt root exists
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:QtRoot" | Out-Null
+
+      - name: Download Qt archives
+        shell: pwsh
+        run: |
+          $QtBaseRepo = 'https://download.qt.io/online/qtsdkrepository/windows_arm64/desktop/qt6_6103/qt6_6103/qt.qt6.6103.win64_msvc2022_arm64'
+          $QtImageFormatsRepo = 'https://download.qt.io/online/qtsdkrepository/windows_arm64/desktop/qt6_6103/qt6_6103/qt.qt6.6103.addons.qtimageformats.win64_msvc2022_arm64'
+          $Qt5CompatRepo = 'https://download.qt.io/online/qtsdkrepository/windows_arm64/desktop/qt6_6103/qt6_6103/qt.qt6.6103.addons.qt5compat.win64_msvc2022_arm64'
+      
+          $files = @(
+            @{ Url = "$QtBaseRepo/6.10.3-0-202603181018qtbase-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qtbase.7z" }
+            @{ Url = "$QtBaseRepo/6.10.3-0-202603181018qtsvg-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qtsvg.7z" }
+            @{ Url = "$QtBaseRepo/6.10.3-0-202603181018qttools-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qttools.7z" }
+            @{ Url = "$QtBaseRepo/6.10.3-0-202603181018qttranslations-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qttranslations.7z" }
+            @{ Url = "$QtImageFormatsRepo/6.10.3-0-202603181018qtimageformats-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qtimageformats.7z" }
+            @{ Url = "$Qt5CompatRepo/6.10.3-0-202603181018qt5compat-Windows-Windows_11_23H2-MSVC2022-Windows-Windows_11_23H2-AARCH64.7z"; Name = "qt5compat.7z" }
+          )
+      
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\downloads" | Out-Null
+      
+          foreach ($f in $files) {
+            $dst = Join-Path "$env:GITHUB_WORKSPACE\downloads" $f.Name
+            Invoke-WebRequest -Uri $f.Url -OutFile $dst
+          }
+
+      - name: Extract Qt archives
+        shell: pwsh
+        run: |
+          $sevenZip = (Get-Command 7z -ErrorAction SilentlyContinue)?.Source
+          if (-not $sevenZip) {
+            throw "7z not found on runner"
+          }
+
+          Get-ChildItem "$env:GITHUB_WORKSPACE\downloads\*.7z" | ForEach-Object {
+            & $sevenZip x $_.FullName "-o$env:QtRoot" -y
+            if ($LASTEXITCODE -ne 0) { throw "Extraction failed for $($_.Name)" }
+          }
+
+      - name: Verify Qt
+        shell: pwsh
+        run: |
+          $QtRoot     = "$env:QtRoot"
+          $BuildDir   = "$env:BuildDir"
+          $InstallDir = "$env:InstallDir"
+
+          Get-Item "$QtRoot\lib\cmake\Qt6\Qt6Config.cmake"
+          Get-Item "$QtRoot\lib\cmake\Qt6Core5Compat\Qt6Core5CompatConfig.cmake"
+          Get-Item "$QtRoot\bin\windeployqt.exe"
+
+      - name: Patch Windows stub
+        shell: pwsh
+        run: |
+          $file = '.\qimgv\components\scriptmanager\scriptmanager.cpp'
+          $text = Get-Content $file -Raw
+          $text = $text -replace 'QString ScriptManager::runCommand\(QString cmd\) \{\}', 'QString ScriptManager::runCommand(QString cmd) { return {}; }'
+          Set-Content -Path $file -Value $text -NoNewline
+
+      - name: Remove old build dir
+        shell: pwsh
+        run: |
+          if (Test-Path "$env:GITHUB_WORKSPACE\build-arm64") {
+            Remove-Item -Recurse -Force "$env:GITHUB_WORKSPACE\build-arm64"
+          }
+      
+      - name: Configure, build, install with MSVC ARM64
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%I in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath`) do set VSROOT=%%I
+      
+          if not exist "%VSROOT%\VC\Auxiliary\Build\vcvarsall.bat" (
+            echo Failed to locate vcvarsall.bat
+            exit /b 1
+          )
+      
+          call "%VSROOT%\VC\Auxiliary\Build\vcvarsall.bat" arm64
+      
+          where cl
+          cl
+      
+          echo QtRoot=%GITHUB_WORKSPACE%\qt\6.10.3\msvc2022_arm64
+          echo BuildDir=%GITHUB_WORKSPACE%\build-arm64
+          echo InstallDir=%GITHUB_WORKSPACE%\out-arm64
+      
+          cmake -S . -B "%GITHUB_WORKSPACE%\build-arm64" -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_INSTALL_PREFIX="%GITHUB_WORKSPACE%\out-arm64" ^
+            -DCMAKE_PREFIX_PATH="%GITHUB_WORKSPACE%\qt\6.10.3\msvc2022_arm64" ^
+            -DQT_DIR="%GITHUB_WORKSPACE%\qt\6.10.3\msvc2022_arm64\lib\cmake\Qt6" ^
+            -DQt6_DIR="%GITHUB_WORKSPACE%\qt\6.10.3\msvc2022_arm64\lib\cmake\Qt6" ^
+            -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON ^
+            -DUSE_QT5=OFF ^
+            -DVIDEO_SUPPORT=OFF ^
+            -DEXIV2=OFF ^
+            -DOPENCV_SUPPORT=OFF
+      
+          cmake --build "%GITHUB_WORKSPACE%\build-arm64" --config Release
+          cmake --install "%GITHUB_WORKSPACE%\build-arm64" --config Release
+          
+      - name: Deploy Qt runtime
+        shell: pwsh
+        run: |
+          $QtRoot     = "$env:QtRoot"
+          $BuildDir   = "$env:BuildDir"
+          $InstallDir = "$env:InstallDir"
+
+          & "$QtRoot\bin\windeployqt.exe" --release "$InstallDir\bin\qimgv.exe"
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "$env:InstallDir\*" -DestinationPath "$env:GITHUB_WORKSPACE\qimgv-windows-arm64.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qimgv-windows-arm64
+          path: qimgv-windows-arm64.zip
