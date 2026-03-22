@@ -1,0 +1,107 @@
+# .github/workflows/build-windows-arm64.yml
+name: build-windows-arm64
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-11-arm
+
+    env:
+      QT_VERSION: 6.10.3
+      QT_ARCH: win64_msvc2022_arm64
+      QtRoot: ${{ github.workspace }}\qt
+      BuildDir: ${{ github.workspace }}\build-arm64
+      InstallDir: ${{ github.workspace }}\out-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Install aqtinstall
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install aqtinstall==3.3.1
+
+      - name: Install Qt
+        shell: pwsh
+        run: |
+          python -m aqt install-qt windows desktop $env:QT_VERSION $env:QT_ARCH `
+            --outputdir "$env:GITHUB_WORKSPACE\qt-root" `
+            -m qt5compat qtimageformats qtsvg qttools qtranslations
+
+          $qtDir = Join-Path "$env:GITHUB_WORKSPACE\qt-root" $env:QT_VERSION
+          $qtDir = Join-Path $qtDir $env:QT_ARCH
+
+          "QtRoot=$qtDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Show ledger
+        shell: pwsh
+        run: |
+          Write-Host 'Ledger'
+          Write-Host "QtRoot     = $env:QtRoot"
+          Write-Host "BuildDir   = $env:BuildDir"
+          Write-Host "InstallDir = $env:InstallDir"
+          Write-Host "PATH       = $env:PATH"
+
+      - name: Patch Windows stub
+        shell: pwsh
+        run: |
+          $file = '.\qimgv\components\scriptmanager\scriptmanager.cpp'
+          $text = Get-Content $file -Raw
+          $text = $text -replace 'QString ScriptManager::runCommand\(QString cmd\) \{\}', 'QString ScriptManager::runCommand(QString cmd) { return {}; }'
+          Set-Content -Path $file -Value $text -NoNewline
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B "$env:BuildDir" -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_INSTALL_PREFIX="$env:InstallDir" `
+            -DCMAKE_PREFIX_PATH="$env:QtRoot" `
+            -DQT_DIR="$env:QtRoot\lib\cmake\Qt6" `
+            -DQt6_DIR="$env:QtRoot\lib\cmake\Qt6" `
+            -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON `
+            -DUSE_QT5=OFF `
+            -DVIDEO_SUPPORT=OFF `
+            -DEXIV2=OFF `
+            -DOPENCV_SUPPORT=OFF
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build "$env:BuildDir" --config Release
+
+      - name: Install
+        shell: pwsh
+        run: |
+          cmake --install "$env:BuildDir" --config Release
+
+      - name: Deploy Qt runtime
+        shell: pwsh
+        run: |
+          & "$env:QtRoot\bin\windeployqt.exe" --release "$env:InstallDir\bin\qimgv.exe"
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "$env:InstallDir\*" -DestinationPath "$env:GITHUB_WORKSPACE\qimgv-windows-arm64.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qimgv-windows-arm64
+          path: qimgv-windows-arm64.zip
