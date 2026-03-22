@@ -90,42 +90,29 @@ jobs:
           $text = $text -replace 'QString ScriptManager::runCommand\(QString cmd\) \{\}', 'QString ScriptManager::runCommand(QString cmd) { return {}; }'
           Set-Content -Path $file -Value $text -NoNewline
 
-      - name: Configure
-        shell: pwsh
+      - name: Configure, build, install
+        shell: cmd
         run: |
-          $QtRoot     = "$env:QtRoot"
-          $BuildDir   = "$env:BuildDir"
-          $InstallDir = "$env:InstallDir"
-
-          cmake -S . -B $BuildDir -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_INSTALL_PREFIX="$InstallDir" `
-            -DCMAKE_PREFIX_PATH="$QtRoot" `
-            -DQT_DIR="$QtRoot\lib\cmake\Qt6" `
-            -DQt6_DIR="$QtRoot\lib\cmake\Qt6" `
-            -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON `
-            -DUSE_QT5=OFF `
-            -DVIDEO_SUPPORT=OFF `
-            -DEXIV2=OFF `
+          call "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" arm64
+      
+          echo QtRoot=%GITHUB_WORKSPACE%\qt\6.10.3\msvc2022_arm64
+          echo BuildDir=%GITHUB_WORKSPACE%\build-arm64
+          echo InstallDir=%GITHUB_WORKSPACE%\out-arm64
+      
+          cmake -S . -B "%GITHUB_WORKSPACE%\build-arm64" -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_INSTALL_PREFIX="%GITHUB_WORKSPACE%\out-arm64" ^
+            -DCMAKE_PREFIX_PATH="%GITHUB_WORKSPACE%\qt\6.10.3\msvc2022_arm64" ^
+            -DQT_DIR="%GITHUB_WORKSPACE%\qt\6.10.3\msvc2022_arm64\lib\cmake\Qt6" ^
+            -DQt6_DIR="%GITHUB_WORKSPACE%\qt\6.10.3\msvc2022_arm64\lib\cmake\Qt6" ^
+            -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON ^
+            -DUSE_QT5=OFF ^
+            -DVIDEO_SUPPORT=OFF ^
+            -DEXIV2=OFF ^
             -DOPENCV_SUPPORT=OFF
-
-      - name: Build
-        shell: pwsh
-        run: |
-          $QtRoot     = "$env:QtRoot"
-          $BuildDir   = "$env:BuildDir"
-          $InstallDir = "$env:InstallDir"
-
-          cmake --build $BuildDir --config Release
-
-      - name: Install
-        shell: pwsh
-        run: |
-          $QtRoot     = "$env:QtRoot"
-          $BuildDir   = "$env:BuildDir"
-          $InstallDir = "$env:InstallDir"
-
-          cmake --install $BuildDir --config Release
+      
+          cmake --build "%GITHUB_WORKSPACE%\build-arm64" --config Release
+          cmake --install "%GITHUB_WORKSPACE%\build-arm64" --config Release
 
       - name: Deploy Qt runtime
         shell: pwsh
