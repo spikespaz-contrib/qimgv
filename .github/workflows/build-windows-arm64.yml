@@ -22,32 +22,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5
 
-      - name: Install aqtinstall
-        shell: pwsh
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install aqtinstall
-
       - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.3'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_arm64'
+          dir: '${{ github.workspace }}'
+          modules: 'qt5compat qtimageformats qtsvg qttools qtranslations'
+    
+      - name: Set build variables
         shell: pwsh
         run: |
-          python -m aqt install-qt windows desktop $env:QT_VERSION $env:QT_ARCH `
-            --outputdir "$env:GITHUB_WORKSPACE\qt-root" `
-            -m qt5compat qtimageformats qtsvg qttools qtranslations
-
-          $qtDir = Join-Path "$env:GITHUB_WORKSPACE\qt-root" $env:QT_VERSION
-          $qtDir = Join-Path $qtDir $env:QT_ARCH
-
-          "QtRoot=$qtDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
+          "QtRoot=$env:QT_ROOT_DIR" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "BuildDir=${{ github.workspace }}\build-arm64" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "InstallDir=${{ github.workspace }}\out-arm64" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        
       - name: Show ledger
         shell: pwsh
         run: |
