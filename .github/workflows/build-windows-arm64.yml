@@ -90,10 +90,27 @@ jobs:
           $text = $text -replace 'QString ScriptManager::runCommand\(QString cmd\) \{\}', 'QString ScriptManager::runCommand(QString cmd) { return {}; }'
           Set-Content -Path $file -Value $text -NoNewline
 
-      - name: Configure, build, install
+      - name: Remove old build dir
+        shell: pwsh
+        run: |
+          if (Test-Path "$env:GITHUB_WORKSPACE\build-arm64") {
+            Remove-Item -Recurse -Force "$env:GITHUB_WORKSPACE\build-arm64"
+          }
+      
+      - name: Configure, build, install with MSVC ARM64
         shell: cmd
         run: |
-          call "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" arm64
+          for /f "usebackq delims=" %%I in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath`) do set VSROOT=%%I
+      
+          if not exist "%VSROOT%\VC\Auxiliary\Build\vcvarsall.bat" (
+            echo Failed to locate vcvarsall.bat
+            exit /b 1
+          )
+      
+          call "%VSROOT%\VC\Auxiliary\Build\vcvarsall.bat" arm64
+      
+          where cl
+          cl
       
           echo QtRoot=%GITHUB_WORKSPACE%\qt\6.10.3\msvc2022_arm64
           echo BuildDir=%GITHUB_WORKSPACE%\build-arm64
@@ -113,7 +130,7 @@ jobs:
       
           cmake --build "%GITHUB_WORKSPACE%\build-arm64" --config Release
           cmake --install "%GITHUB_WORKSPACE%\build-arm64" --config Release
-
+          
       - name: Deploy Qt runtime
         shell: pwsh
         run: |
